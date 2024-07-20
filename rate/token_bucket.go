@@ -73,7 +73,6 @@ func (rl *TokenBucketRatelimiter) refreshBucket(ip string) bool {
 		return false
 	}
 
-	slog.Info("Incrementing request bucket for", "ip", ip)
 	inc := r + 1
 	invariant(inc <= rl.bucketSize, "Cannot increment greater than the bucket size")
 	rl.requests[ip] = inc
