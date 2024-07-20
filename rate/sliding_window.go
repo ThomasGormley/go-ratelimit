@@ -34,12 +34,11 @@ func (l *SlidingWindowLimiter) Limit(ip string) bool {
 	times := findOrInit(l.requestTimes, ip)
 	timesAfterWindowStart := pruneTimes(times, windowStart)
 
-	l.requestTimes[ip] = timesAfterWindowStart
-
 	if len(timesAfterWindowStart) >= l.threshold {
 		return true
 	}
 
-	l.requestTimes[ip] = append(l.requestTimes[ip], now)
+	timesAfterWindowStart = append(l.requestTimes[ip], now)
+	l.requestTimes[ip] = timesAfterWindowStart
 	return false
 }

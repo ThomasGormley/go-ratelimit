@@ -48,6 +48,7 @@ func findOrInit(m map[string][]time.Time, identifier string) []time.Time {
 
 	if !ok {
 		t = []time.Time{}
+		m[identifier] = t
 	}
 
 	return t
