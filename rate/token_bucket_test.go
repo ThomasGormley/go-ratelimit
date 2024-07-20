@@ -16,6 +16,7 @@ func TestTokenBucketLimiter_LimitsAndRefillsBucket(t *testing.T) {
 	IsEqualBool(t, limiter.Limit(client), true)
 	time.Sleep(time.Second * 3)
 	IsEqualBool(t, limiter.Limit(client), false)
+	IsEqualBool(t, limiter.Limit(client), true)
 }
 
 // IsEqualBool fails test if got and want are not identical
