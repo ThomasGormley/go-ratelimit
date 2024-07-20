@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"log/slog"
 	"net"
@@ -12,17 +11,18 @@ import (
 	"time"
 )
 
+type Middleware func(next http.HandlerFunc) http.HandlerFunc
+
 type TokenBucketRatelimiter struct {
 	bucketSize      int
 	refreshInterval time.Duration
 
-	requests        map[string]int
-	requestsMu      sync.Mutex
-	tokenRefreshCtx context.Context
-	kickoffOnce     sync.Once
+	requests    map[string]int
+	requestsMu  sync.Mutex
+	kickoffOnce sync.Once
 }
 
-func (rl *TokenBucketRatelimiter) kickoffRefreshSchedule() {
+func (rl *TokenBucketRatelimiter) kickoffRefreshSchedule(ctx context.Context) {
 	ticker := time.NewTicker(rl.refreshInterval)
 	for {
 		select {
@@ -33,11 +33,15 @@ func (rl *TokenBucketRatelimiter) kickoffRefreshSchedule() {
 					rl.refreshBucket(ip)
 				}
 			}()
-		case <-rl.tokenRefreshCtx.Done():
+		case <-ctx.Done():
 			ticker.Stop()
 			return
 		}
 	}
+}
+
+func (rl *TokenBucketRatelimiter) kickoffRefreshScheduleOnce(ctx context.Context) {
+
 }
 
 func (rl *TokenBucketRatelimiter) refreshBucket(ip string) bool {
@@ -54,15 +58,6 @@ func (rl *TokenBucketRatelimiter) refreshBucket(ip string) bool {
 }
 
 func (rl *TokenBucketRatelimiter) allowRequest(ip string) bool {
-	// kickoffRefreshScheduleOnce := sync.OnceFunc(rl.kickoffRefreshSchedule)
-	// go kickoffRefreshScheduleOnce()
-
-	rl.kickoffOnce.Do(func() {
-		go rl.kickoffRefreshSchedule()
-	})
-
-	slog.Info("Evaluating for", "ip", ip)
-
 	rl.requestsMu.Lock()
 	defer rl.requestsMu.Unlock()
 
@@ -71,36 +66,37 @@ func (rl *TokenBucketRatelimiter) allowRequest(ip string) bool {
 		slog.Info("No entry found")
 		rl.requests[ip] = rl.bucketSize
 		remaining = rl.bucketSize
-
-		fmt.Println("map:", rl.requests)
 	}
 
-	slog.Info("Remaining rquests", "r", remaining)
 	if shouldAllow := remaining > 0; !shouldAllow {
-		fmt.Println("Remaining return false")
 		return false
 	} else {
 		// decrement requests
-		fmt.Println("Decrementing request to ", remaining-1)
 		rl.requests[ip] = remaining - 1
 		return true
 	}
 }
 
-func bucketLimiter(next http.HandlerFunc) http.HandlerFunc {
+func TokenBucketRateLimiter(size int) Middleware {
 	limiter := TokenBucketRatelimiter{
-		bucketSize:      2,
+		bucketSize:      size,
 		refreshInterval: time.Millisecond * 1000,
 		requests:        make(map[string]int),
-		tokenRefreshCtx: context.Background(),
 	}
-	return func(w http.ResponseWriter, r *http.Request) {
-		ip := getClientIP(r)
-		if !limiter.allowRequest(ip) {
-			w.WriteHeader(http.StatusTooManyRequests)
-			return
+
+	limiter.kickoffOnce.Do(func() {
+		go limiter.kickoffRefreshSchedule(context.Background())
+	})
+
+	return func(next http.HandlerFunc) http.HandlerFunc {
+		return func(w http.ResponseWriter, r *http.Request) {
+			ip := getClientIP(r)
+			if !limiter.allowRequest(ip) {
+				w.WriteHeader(http.StatusTooManyRequests)
+				return
+			}
+			next(w, r)
 		}
-		next(w, r)
 	}
 }
 
@@ -111,7 +107,7 @@ func handleLimited(w http.ResponseWriter, r *http.Request) {
 func main() {
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("/limited", bucketLimiter(handleLimited))
+	mux.HandleFunc("/limited", TokenBucketRateLimiter(2)(handleLimited))
 	mux.HandleFunc("/unlimited", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("Hello, unlimited\n"))
 	})
