@@ -2,7 +2,6 @@ package rate
 
 import (
 	"context"
-	"fmt"
 	"sync"
 	"time"
 )
@@ -39,18 +38,16 @@ func (l *FixedWindowLimiter) Limit(ip string) bool {
 
 func (l *FixedWindowLimiter) handleWindow(ctx context.Context) {
 	now := time.Now()
-	// round down to the nearest window, then +1 window
+	// round down to the nearest window, then +1 window to get our end location
 	nextWindow := now.Truncate(l.window).Add(l.window)
 	timeUntilNextWindow := time.Until(nextWindow)
-	fmt.Println("Time until next window: ", timeUntilNextWindow)
 	untilNextWindowTicker := time.NewTicker(timeUntilNextWindow)
 
 	select {
 	case <-untilNextWindowTicker.C:
-		// Handle the elapsed window
+		// Handle the window we joined mid-way
 		go l.clearRequests()
-		fmt.Println("Elapsed")
-		// start window synced with clock
+		// start a continuous window synced with clock
 		ticker := time.NewTicker(l.window)
 		for {
 			select {
