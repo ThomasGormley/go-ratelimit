@@ -3,7 +3,6 @@ package rate
 import (
 	"context"
 	"fmt"
-	"net/http"
 	"sync"
 	"time"
 )
@@ -18,10 +17,10 @@ type FixedWindowLimiter struct {
 	windowOnce sync.Once
 }
 
-func LimitFixedWindow() Middleware {
-	limiter := FixedWindowLimiter{
-		window:    time.Second * 10,
-		threshold: 3,
+func NewFixedWindowLimiter(window time.Duration, threshold int) *FixedWindowLimiter {
+	limiter := &FixedWindowLimiter{
+		window:    window,
+		threshold: threshold,
 
 		requests: make(map[string]int),
 	}
@@ -29,16 +28,7 @@ func LimitFixedWindow() Middleware {
 		go limiter.handleWindow(context.Background())
 	})
 
-	return func(next http.HandlerFunc) http.HandlerFunc {
-		return func(w http.ResponseWriter, r *http.Request) {
-			ip := getClientIP(r)
-			if limiter.limit(ip) {
-				w.WriteHeader(http.StatusTooManyRequests)
-				return
-			}
-			next(w, r)
-		}
-	}
+	return limiter
 }
 
 func (l *FixedWindowLimiter) handleWindow(ctx context.Context) {
@@ -81,7 +71,7 @@ func (l *FixedWindowLimiter) clearRequests() bool {
 	return true
 }
 
-func (l *FixedWindowLimiter) limit(ip string) bool {
+func (l *FixedWindowLimiter) Limit(ip string) bool {
 	c := l.reqCount(ip)
 	defer l.incrementRequestCount(ip)
 	return c > l.threshold

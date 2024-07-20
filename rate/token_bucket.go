@@ -3,14 +3,9 @@ package rate
 import (
 	"context"
 	"log/slog"
-	"net"
-	"net/http"
-	"strings"
 	"sync"
 	"time"
 )
-
-type Middleware func(next http.HandlerFunc) http.HandlerFunc
 
 type TokenBucketRatelimiter struct {
 	bucketSize      int
@@ -19,6 +14,20 @@ type TokenBucketRatelimiter struct {
 	requests    map[string]int
 	requestsMu  sync.Mutex
 	kickoffOnce sync.Once
+}
+
+func NewTokenBucketLimiter(bucketSize int, refreshInterval time.Duration) *TokenBucketRatelimiter {
+	limiter := &TokenBucketRatelimiter{
+		bucketSize:      bucketSize,
+		refreshInterval: refreshInterval,
+		requests:        make(map[string]int),
+	}
+
+	limiter.kickoffOnce.Do(func() {
+		go limiter.kickoffRefreshSchedule(context.Background())
+	})
+
+	return limiter
 }
 
 func (rl *TokenBucketRatelimiter) kickoffRefreshSchedule(ctx context.Context) {
@@ -52,7 +61,7 @@ func (rl *TokenBucketRatelimiter) refreshBucket(ip string) bool {
 	return true
 }
 
-func (rl *TokenBucketRatelimiter) limit(ip string) bool {
+func (rl *TokenBucketRatelimiter) Limit(ip string) bool {
 	rl.requestsMu.Lock()
 	defer rl.requestsMu.Unlock()
 
@@ -69,52 +78,6 @@ func (rl *TokenBucketRatelimiter) limit(ip string) bool {
 		rl.requests[ip] = remaining - 1
 		return false
 	}
-}
-
-func TokenBucketRateLimiter(size int) Middleware {
-	limiter := TokenBucketRatelimiter{
-		bucketSize:      size,
-		refreshInterval: time.Millisecond * 1000,
-		requests:        make(map[string]int),
-	}
-
-	limiter.kickoffOnce.Do(func() {
-		go limiter.kickoffRefreshSchedule(context.Background())
-	})
-
-	return func(next http.HandlerFunc) http.HandlerFunc {
-		return func(w http.ResponseWriter, r *http.Request) {
-			ip := getClientIP(r)
-			if !limiter.limit(ip) {
-				w.WriteHeader(http.StatusTooManyRequests)
-				return
-			}
-			next(w, r)
-		}
-	}
-}
-
-func getClientIP(r *http.Request) string {
-	// Check the X-Forwarded-For header for the client IP
-	forwarded := r.Header.Get("X-Forwarded-For")
-	if forwarded != "" {
-		// X-Forwarded-For can contain a comma-separated list of IPs, take the first one
-		ips := strings.Split(forwarded, ",")
-		return strings.TrimSpace(ips[0])
-	}
-
-	// Check the X-Real-IP header for the client IP
-	realIP := r.Header.Get("X-Real-IP")
-	if realIP != "" {
-		return realIP
-	}
-
-	// Fallback to RemoteAddr if the headers are not set
-	ip, _, err := net.SplitHostPort(r.RemoteAddr)
-	if err != nil {
-		return r.RemoteAddr
-	}
-	return ip
 }
 
 func invariant(cond bool, msg string) {
