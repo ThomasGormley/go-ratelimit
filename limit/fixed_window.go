@@ -2,6 +2,7 @@ package limit
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"sync"
 	"time"
@@ -19,7 +20,7 @@ type FixedWindowLimiter struct {
 
 func FixedWindow() Middleware {
 	limiter := FixedWindowLimiter{
-		window:    time.Second * 5,
+		window:    time.Second * 10,
 		threshold: 3,
 
 		requests: make(map[string]int),
@@ -41,23 +42,43 @@ func FixedWindow() Middleware {
 }
 
 func (l *FixedWindowLimiter) handleWindow(ctx context.Context) {
-	ticker := time.NewTicker(l.window)
-	for {
-		select {
-		case <-ticker.C:
-			go func() {
-				l.requestsMu.Lock()
-				defer l.requestsMu.Unlock()
-				for k := range l.requests {
-					delete(l.requests, k)
-				}
+	now := time.Now()
+	// round down to the nearest window, then +1 window
+	nextWindow := now.Truncate(l.window).Add(l.window)
+	timeUntilNextWindow := time.Until(nextWindow)
+	fmt.Println("Time until next window: ", timeUntilNextWindow)
+	untilNextWindowTicker := time.NewTicker(timeUntilNextWindow)
 
-			}()
-		case <-ctx.Done():
-			ticker.Stop()
-			return
+	select {
+	case <-untilNextWindowTicker.C:
+		// Handle the elapsed window
+		go l.clearRequests()
+		fmt.Println("Elapsed")
+		// start window synced with clock
+		ticker := time.NewTicker(l.window)
+		for {
+			select {
+			case <-ticker.C:
+				go l.clearRequests()
+			case <-ctx.Done():
+				ticker.Stop()
+				return
+			}
 		}
+	case <-ctx.Done():
+		untilNextWindowTicker.Stop()
+		return
 	}
+}
+
+func (l *FixedWindowLimiter) clearRequests() bool {
+	l.requestsMu.Lock()
+	defer l.requestsMu.Unlock()
+	for k := range l.requests {
+		delete(l.requests, k)
+	}
+
+	return true
 }
 
 func (l *FixedWindowLimiter) allowed(ip string) bool {
