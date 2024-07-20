@@ -22,7 +22,8 @@ func wrap(handler http.HandlerFunc, middlewares ...limit.Middleware) http.Handle
 func main() {
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("/limited", wrap(handleLimited, limit.TokenBucketRateLimiter(2)))
+	// mux.HandleFunc("/limited", wrap(handleLimited, limit.TokenBucketRateLimiter(2)))
+	mux.HandleFunc("/limited", wrap(handleLimited, limit.FixedWindow()))
 	mux.HandleFunc("/unlimited", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("Hello, unlimited\n"))
 	})
