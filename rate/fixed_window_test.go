@@ -8,6 +8,7 @@ import (
 )
 
 func TestFixedWindowLimiter_LimitsAndResets(t *testing.T) {
+	t.Parallel()
 	threshold, window := 2, time.Second*5
 	limiter := rate.NewFixedWindowLimiter(window, threshold)
 	client := "client:1"

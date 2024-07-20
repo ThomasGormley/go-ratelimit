@@ -8,6 +8,7 @@ import (
 )
 
 func TestTokenBucketLimiter_LimitsAndRefillsBucket(t *testing.T) {
+	t.Parallel()
 	bucket, interval := 1, time.Second*2
 	limiter := rate.NewTokenBucketLimiter(bucket, interval)
 	client := "client:1"
