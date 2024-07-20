@@ -31,7 +31,7 @@ func (l *FixedWindowLimiter) Limit(ip string) bool {
 	l.requestsMu.Lock()
 	defer l.requestsMu.Unlock()
 
-	requestTimes := findOrInit(l.requests, ip)
+	requestTimes := lookup(l.requests, ip)
 	timesAfterWindow := pruneTimes(requestTimes, windowStart)
 
 	if len(timesAfterWindow) >= l.threshold {
@@ -43,7 +43,10 @@ func (l *FixedWindowLimiter) Limit(ip string) bool {
 	return false
 }
 
-func findOrInit(m map[string][]time.Time, identifier string) []time.Time {
+// lookup retrieves the slice of time values associated with the given identifier from the provided map.
+// If the identifier is not found in the map, an empty slice is created and associated with the identifier.
+// The function returns the slice of time values.
+func lookup(m map[string][]time.Time, identifier string) []time.Time {
 	t, ok := m[identifier]
 
 	if !ok {

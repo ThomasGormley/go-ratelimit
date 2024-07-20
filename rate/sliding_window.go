@@ -31,7 +31,7 @@ func (l *SlidingWindowLimiter) Limit(ip string) bool {
 	l.requestTimesMu.Lock()
 	defer l.requestTimesMu.Unlock()
 
-	times := findOrInit(l.requestTimes, ip)
+	times := lookup(l.requestTimes, ip)
 	timesAfterWindowStart := pruneTimes(times, windowStart)
 
 	if len(timesAfterWindowStart) >= l.threshold {
