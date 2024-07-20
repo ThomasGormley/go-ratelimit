@@ -26,7 +26,7 @@ type SlidingWindowLimiter struct {
 
 func (l *SlidingWindowLimiter) Limit(ip string) bool {
 	now := time.Now()
-	windowStart := now.Truncate(l.window).Add(l.window)
+	windowStart := now.Add(-l.window)
 
 	l.requestTimesMu.Lock()
 	defer l.requestTimesMu.Unlock()
