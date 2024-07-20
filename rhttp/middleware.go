@@ -41,6 +41,21 @@ func RateLimitFixedWindow() Middleware {
 	}
 }
 
+func RateLimitSlidingWindow() Middleware {
+	limiter := rate.NewSlidingWindowLimiter(time.Second*10, 5)
+
+	return func(next http.HandlerFunc) http.HandlerFunc {
+		return func(w http.ResponseWriter, r *http.Request) {
+			ip := getClientIP(r)
+			if limiter.Limit(ip) {
+				w.WriteHeader(http.StatusTooManyRequests)
+				return
+			}
+			next(w, r)
+		}
+	}
+}
+
 func getClientIP(r *http.Request) string {
 	// Check the X-Forwarded-For header for the client IP
 	forwarded := r.Header.Get("X-Forwarded-For")
