@@ -31,18 +31,8 @@ func (l *SlidingWindowLimiter) Limit(ip string) bool {
 	l.requestTimesMu.Lock()
 	defer l.requestTimesMu.Unlock()
 
-	times, ok := l.requestTimes[ip]
-
-	if !ok {
-		times = []time.Time{}
-	}
-
-	timesAfterWindowStart := []time.Time{}
-	for _, t := range times {
-		if t.After(windowStart) {
-			timesAfterWindowStart = append(timesAfterWindowStart, t)
-		}
-	}
+	times := findOrInit(l.requestTimes, ip)
+	timesAfterWindowStart := pruneTimes(times, windowStart)
 
 	l.requestTimes[ip] = timesAfterWindowStart
 
