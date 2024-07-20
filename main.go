@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/thomasgormley/go-ratelimit/limit"
+	"github.com/thomasgormley/go-ratelimit/rate"
 )
 
 func handleLimited(w http.ResponseWriter, r *http.Request) {
@@ -26,7 +26,7 @@ func logRequest() limit.Middleware {
 	}
 }
 
-func wrap(handler http.HandlerFunc, middlewares ...limit.Middleware) http.HandlerFunc {
+func wrap(handler http.HandlerFunc, middlewares ...rate.Middleware) http.HandlerFunc {
 	for i := len(middlewares) - 1; i >= 0; i-- {
 		handler = middlewares[i](handler)
 	}
@@ -38,7 +38,7 @@ func main() {
 
 	mux := http.NewServeMux()
 	// mux.HandleFunc("/limited", wrap(handleLimited, limit.TokenBucketRateLimiter(2)))
-	mux.HandleFunc("/limited", wrap(handleLimited, logRequest(), limit.FixedWindow()))
+	mux.HandleFunc("/limited", wrap(handleLimited, logRequest(), rate.LimitFixedWindow()))
 	mux.HandleFunc("/unlimited", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("Hello, unlimited\n"))
 	})

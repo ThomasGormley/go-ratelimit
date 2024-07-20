@@ -1,4 +1,4 @@
-package limit
+package rate
 
 import (
 	"context"
@@ -18,7 +18,7 @@ type FixedWindowLimiter struct {
 	windowOnce sync.Once
 }
 
-func FixedWindow() Middleware {
+func LimitFixedWindow() Middleware {
 	limiter := FixedWindowLimiter{
 		window:    time.Second * 10,
 		threshold: 3,
