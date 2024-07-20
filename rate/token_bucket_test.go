@@ -7,7 +7,7 @@ import (
 	"github.com/thomasgormley/go-ratelimit/rate"
 )
 
-func TestTokenBucketLimiter(t *testing.T) {
+func TestTokenBucketLimiter_LimitsAndRefillsBucket(t *testing.T) {
 	bucket, interval := 1, time.Second*2
 	limiter := rate.NewTokenBucketLimiter(bucket, interval)
 	client := "client:1"
