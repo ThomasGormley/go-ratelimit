@@ -52,7 +52,7 @@ func (rl *TokenBucketRatelimiter) refreshBucket(ip string) bool {
 	return true
 }
 
-func (rl *TokenBucketRatelimiter) allowRequest(ip string) bool {
+func (rl *TokenBucketRatelimiter) limit(ip string) bool {
 	rl.requestsMu.Lock()
 	defer rl.requestsMu.Unlock()
 
@@ -63,12 +63,11 @@ func (rl *TokenBucketRatelimiter) allowRequest(ip string) bool {
 		remaining = rl.bucketSize
 	}
 
-	if shouldAllow := remaining > 0; !shouldAllow {
-		return false
-	} else {
-		// decrement requests
-		rl.requests[ip] = remaining - 1
+	if limitReached := remaining <= 0; limitReached {
 		return true
+	} else {
+		rl.requests[ip] = remaining - 1
+		return false
 	}
 }
 
@@ -86,7 +85,7 @@ func TokenBucketRateLimiter(size int) Middleware {
 	return func(next http.HandlerFunc) http.HandlerFunc {
 		return func(w http.ResponseWriter, r *http.Request) {
 			ip := getClientIP(r)
-			if !limiter.allowRequest(ip) {
+			if !limiter.limit(ip) {
 				w.WriteHeader(http.StatusTooManyRequests)
 				return
 			}

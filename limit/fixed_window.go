@@ -32,7 +32,7 @@ func FixedWindow() Middleware {
 	return func(next http.HandlerFunc) http.HandlerFunc {
 		return func(w http.ResponseWriter, r *http.Request) {
 			ip := getClientIP(r)
-			if !limiter.allowed(ip) {
+			if limiter.limit(ip) {
 				w.WriteHeader(http.StatusTooManyRequests)
 				return
 			}
@@ -81,10 +81,10 @@ func (l *FixedWindowLimiter) clearRequests() bool {
 	return true
 }
 
-func (l *FixedWindowLimiter) allowed(ip string) bool {
+func (l *FixedWindowLimiter) limit(ip string) bool {
 	c := l.reqCount(ip)
 	defer l.incrementRequestCount(ip)
-	return c < l.threshold
+	return c > l.threshold
 }
 
 func (l *FixedWindowLimiter) reqCount(ip string) int {
