@@ -7,15 +7,6 @@ import (
 	"time"
 )
 
-type TokenBucketRatelimiter struct {
-	bucketSize      int
-	refreshInterval time.Duration
-
-	requests    map[string]int
-	requestsMu  sync.Mutex
-	kickoffOnce sync.Once
-}
-
 func NewTokenBucketLimiter(bucketSize int, refreshInterval time.Duration) *TokenBucketRatelimiter {
 	limiter := &TokenBucketRatelimiter{
 		bucketSize:      bucketSize,
@@ -28,6 +19,34 @@ func NewTokenBucketLimiter(bucketSize int, refreshInterval time.Duration) *Token
 	})
 
 	return limiter
+}
+
+type TokenBucketRatelimiter struct {
+	bucketSize      int
+	refreshInterval time.Duration
+
+	requests    map[string]int
+	requestsMu  sync.Mutex
+	kickoffOnce sync.Once
+}
+
+func (rl *TokenBucketRatelimiter) Limit(ip string) bool {
+	rl.requestsMu.Lock()
+	defer rl.requestsMu.Unlock()
+
+	remaining, ok := rl.requests[ip]
+	if !ok {
+		slog.Info("No entry found")
+		rl.requests[ip] = rl.bucketSize
+		remaining = rl.bucketSize
+	}
+
+	if limitReached := remaining <= 0; limitReached {
+		return true
+	} else {
+		rl.requests[ip] = remaining - 1
+		return false
+	}
 }
 
 func (rl *TokenBucketRatelimiter) kickoffRefreshSchedule(ctx context.Context) {
@@ -59,25 +78,6 @@ func (rl *TokenBucketRatelimiter) refreshBucket(ip string) bool {
 	invariant(inc <= rl.bucketSize, "Cannot increment greater than the bucket size")
 	rl.requests[ip] = inc
 	return true
-}
-
-func (rl *TokenBucketRatelimiter) Limit(ip string) bool {
-	rl.requestsMu.Lock()
-	defer rl.requestsMu.Unlock()
-
-	remaining, ok := rl.requests[ip]
-	if !ok {
-		slog.Info("No entry found")
-		rl.requests[ip] = rl.bucketSize
-		remaining = rl.bucketSize
-	}
-
-	if limitReached := remaining <= 0; limitReached {
-		return true
-	} else {
-		rl.requests[ip] = remaining - 1
-		return false
-	}
 }
 
 func invariant(cond bool, msg string) {

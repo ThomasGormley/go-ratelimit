@@ -7,16 +7,6 @@ import (
 	"time"
 )
 
-type FixedWindowLimiter struct {
-	window    time.Duration
-	threshold int
-
-	requests   map[string]int
-	requestsMu sync.Mutex
-
-	windowOnce sync.Once
-}
-
 func NewFixedWindowLimiter(window time.Duration, threshold int) *FixedWindowLimiter {
 	limiter := &FixedWindowLimiter{
 		window:    window,
@@ -29,6 +19,22 @@ func NewFixedWindowLimiter(window time.Duration, threshold int) *FixedWindowLimi
 	})
 
 	return limiter
+}
+
+type FixedWindowLimiter struct {
+	window    time.Duration
+	threshold int
+
+	requests   map[string]int
+	requestsMu sync.Mutex
+
+	windowOnce sync.Once
+}
+
+func (l *FixedWindowLimiter) Limit(ip string) bool {
+	c := l.reqCount(ip)
+	defer l.incrementReqCount(ip)
+	return c > l.threshold
 }
 
 func (l *FixedWindowLimiter) handleWindow(ctx context.Context) {
@@ -71,12 +77,6 @@ func (l *FixedWindowLimiter) clearRequests() bool {
 	return true
 }
 
-func (l *FixedWindowLimiter) Limit(ip string) bool {
-	c := l.reqCount(ip)
-	defer l.incrementRequestCount(ip)
-	return c > l.threshold
-}
-
 func (l *FixedWindowLimiter) reqCount(ip string) int {
 	l.requestsMu.Lock()
 	defer l.requestsMu.Unlock()
@@ -91,7 +91,7 @@ func (l *FixedWindowLimiter) reqCount(ip string) int {
 	return r
 }
 
-func (l *FixedWindowLimiter) incrementRequestCount(ip string) int {
+func (l *FixedWindowLimiter) incrementReqCount(ip string) int {
 	c := l.reqCount(ip)
 
 	new := c + 1
