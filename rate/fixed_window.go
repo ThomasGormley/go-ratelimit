@@ -28,6 +28,9 @@ func (l *FixedWindowLimiter) Limit(ip string) bool {
 	now := time.Now()
 	windowStart := now.Truncate(l.window)
 
+	l.requestsMu.Lock()
+	defer l.requestsMu.Unlock()
+
 	requestTimes, ok := l.requests[ip]
 
 	if !ok {
