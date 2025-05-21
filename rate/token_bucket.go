@@ -1,8 +1,7 @@
 package rate
 
 import (
-	"context"
-	"log/slog"
+	"fmt"
 	"sync"
 	"time"
 )
@@ -11,12 +10,8 @@ func NewTokenBucketLimiter(bucketSize int, refreshInterval time.Duration) *Token
 	limiter := &TokenBucketRatelimiter{
 		bucketSize:      bucketSize,
 		refreshInterval: refreshInterval,
-		requests:        make(map[string]int),
+		requests:        make(map[string][]time.Time),
 	}
-
-	limiter.kickoffOnce.Do(func() {
-		go limiter.kickoffRefreshSchedule(context.Background())
-	})
 
 	return limiter
 }
@@ -25,62 +20,75 @@ type TokenBucketRatelimiter struct {
 	bucketSize      int
 	refreshInterval time.Duration
 
-	requests    map[string]int
+	requests    map[string][]time.Time
 	requestsMu  sync.Mutex
 	kickoffOnce sync.Once
 }
 
 func (rl *TokenBucketRatelimiter) Limit(ip string) bool {
+	now := time.Now()
+	// Check time since last request, and calculate any bucket refresh up to
+	// maximum bucketSize
 	rl.requestsMu.Lock()
 	defer rl.requestsMu.Unlock()
+	requests := lookup(rl.requests, ip)
 
-	remaining, ok := rl.requests[ip]
-	if !ok {
-		slog.Info("No entry found")
-		rl.requests[ip] = rl.bucketSize
-		remaining = rl.bucketSize
+	if len(rl.requests[ip]) > rl.bucketSize {
+		// only keep the latest n (bucketSize) requests
+		rl.requests[ip] = rl.requests[ip][len(rl.requests[ip])-rl.bucketSize:]
 	}
 
-	if limitReached := remaining <= 0; limitReached {
+	if len(requests) > 0 {
+		lastRequest := requests[min(len(requests)-1, 0)]
+		sinceLast := now.Sub(lastRequest)
+		intervalsPassed := int(sinceLast / rl.refreshInterval)
+		refreshTokens := intervalsPassed * 1
+		fmt.Println("refreshTokens:", refreshTokens)
+	}
+
+	availableTokens := min(rl.bucketSize, len(requests))
+
+	fmt.Println("availableTokens:", availableTokens)
+	if availableTokens >= rl.bucketSize {
 		return true
-	} else {
-		rl.requests[ip] = remaining - 1
-		return false
-	}
-}
-
-func (rl *TokenBucketRatelimiter) kickoffRefreshSchedule(ctx context.Context) {
-	ticker := time.NewTicker(rl.refreshInterval)
-	for {
-		select {
-		case <-ticker.C:
-			go func() {
-				// refresh
-				for ip := range rl.requests {
-					rl.refreshBucket(ip)
-				}
-			}()
-		case <-ctx.Done():
-			ticker.Stop()
-			return
-		}
-	}
-}
-
-func (rl *TokenBucketRatelimiter) refreshBucket(ip string) bool {
-	r, ok := rl.requests[ip]
-	if !ok || r == rl.bucketSize {
-		return false
 	}
 
-	inc := r + 1
-	invariant(inc <= rl.bucketSize, "Cannot increment greater than the bucket size")
-	rl.requests[ip] = inc
-	return true
+	rl.requests[ip] = append(rl.requests[ip], now)
+	return false
 }
 
-func invariant(cond bool, msg string) {
-	if !cond {
-		panic(msg)
-	}
-}
+// func (rl *TokenBucketRatelimiter) kickoffRefreshSchedule(ctx context.Context) {
+// 	ticker := time.NewTicker(rl.refreshInterval)
+// 	for {
+// 		select {
+// 		case <-ticker.C:
+// 			go func() {
+// 				// refresh
+// 				for ip := range rl.requests {
+// 					rl.refreshBucket(ip)
+// 				}
+// 			}()
+// 		case <-ctx.Done():
+// 			ticker.Stop()
+// 			return
+// 		}
+// 	}
+// }
+
+// func (rl *TokenBucketRatelimiter) refreshBucket(ip string) bool {
+// 	r, ok := rl.requests[ip]
+// 	if !ok || r == rl.bucketSize {
+// 		return false
+// 	}
+
+// 	inc := r + 1
+// 	invariant(inc <= rl.bucketSize, "Cannot increment greater than the bucket size")
+// 	rl.requests[ip] = inc
+// 	return true
+// }
+
+// func invariant(cond bool, msg string) {
+// 	if !cond {
+// 		panic(msg)
+// 	}
+// }
